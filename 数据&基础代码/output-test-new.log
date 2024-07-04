@@ -4,9 +4,9 @@ Traceback (most recent call last):
     outputs = model.forward(x_batch)
   File "train-test.py", line 41, in forward
     x = self.conv1.forward(x)
-  File "/mnt/home/xuzechen/Class_AI_MNIST/2024夏季学期工高实验班实验一-MNIST识别/数据&基础代码/module.py", line 204, in forward
+  File "/mnt/home/xuzechen/Class_AI_MNIST/2024夏季学期工高实验班实验一-MNIST识别/数据&基础代码/module.py", line 213, in forward
     x_col = self.im2col(x_padded, HH, WW, self.stride)
-  File "/mnt/home/xuzechen/Class_AI_MNIST/2024夏季学期工高实验班实验一-MNIST识别/数据&基础代码/module.py", line 142, in im2col
+  File "/mnt/home/xuzechen/Class_AI_MNIST/2024夏季学期工高实验班实验一-MNIST识别/数据&基础代码/module.py", line 151, in im2col
     col[:, :, :, :, i, j] = x[:, :, i_start:i_end, j_start:j_end]
   File "cupy/core/core.pyx", line 1356, in cupy.core.core.ndarray.__setitem__
   File "cupy/core/_routines_indexing.pyx", line 51, in cupy.core._routines_indexing._ndarray_setitem

@@ -124,12 +124,25 @@ class Conv2d:
         # 初始化权重和偏置
         self.weight = cp.random.randn(out_channels, in_channels, kernel_size, kernel_size) * cp.sqrt(2. / in_channels)
         self.bias = cp.zeros(out_channels)
+        print("Conv2d initialized with in_channels={}, out_channels={}, kernel_size={}, stride={}, padding={}".format(
+            in_channels, out_channels, kernel_size, stride, padding))
+
+    
+    def get_weights(self):
+        return {'weight': self.weight, 'bias': self.bias}
+
+    def set_weights(self, weights):
+        self.weight = weights['weight']
+        self.bias = weights['bias']
 
     def im2col(self, x, HH, WW, stride):
         N, C, H, W = x.shape
-        out_h = (H + 2 * self.padding - HH) // stride + 1
-        out_w = (W + 2 * self.padding - WW) // stride + 1
+        H_padded = H + 2 * self.padding
+        W_padded = W + 2 * self.padding
+        out_h = (H_padded - HH) // stride + 1
+        out_w = (W_padded - WW) // stride + 1
         col = cp.zeros((N, C, HH, WW, out_h, out_w))
+        print("im2col: N={}, C={}, H={}, W={}, H_padded={}, W_padded={}, out_h={}, out_w={}".format(N, C, H, W, H_padded, W_padded, out_h, out_w))
 
         for i in range(out_h):
             for j in range(out_w):
@@ -137,37 +150,12 @@ class Conv2d:
                 i_end = i_start + HH
                 j_start = j * stride
                 j_end = j_start + WW
-                 # 添加检查，确保切片的大小总是匹配的
-                if i_end <= H + 2 * self.padding and j_end <= W + 2 * self.padding:
-                    col[:, :, :, :, i, j] = x[:, :, i_start:i_end, j_start:j_end]
-
+                if i_end > H_padded or j_end > W_padded:
+                    continue
+                col[:, :, :, :, i, j] = x[:, :, i_start:i_end, j_start:j_end]
 
         col = col.transpose(1, 2, 3, 0, 4, 5).reshape(C * HH * WW, -1)
         return col
-    
-    def col2im(self, cols, x_shape, HH, WW, stride, padding):
-        N, C, H, W = x_shape
-        H_padded, W_padded = H + 2 * padding, W + 2 * padding
-        x_padded = cp.zeros((N, C, H_padded, W_padded))
-
-        out_h = (H + 2 * padding - HH) // stride + 1
-        out_w = (W + 2 * padding - WW) // stride + 1
-
-        cols_reshaped = cols.reshape(C, HH, WW, N, out_h, out_w).transpose(3, 0, 1, 2, 4, 5)
-
-        for i in range(out_h):
-            for j in range(out_w):
-                i_start = i * stride
-                i_end = i_start + HH
-                j_start = j * stride
-                j_end = j_start + WW
-                # 添加检查，确保切片的大小总是匹配的
-                if i_end <= H + 2 * padding and j_end <= W + 2 * padding:
-                    x_padded[:, :, i_start:i_end, j_start:j_end] += cols_reshaped[:, :, :, :, i, j]
-
-        if padding == 0:
-            return x_padded
-        return x_padded[:, :, padding:-padding, padding:-padding]
 
 
     def forward(self, x):
@@ -175,11 +163,12 @@ class Conv2d:
         x - shape (N, C, H, W)
         return the result of Conv2d with shape (N, O, H', W')
         """
-        self.x = x  # 记录输入张量
+        self.x = x
         N, C, H, W = x.shape
         F, _, HH, WW = self.weight.shape
         H_out = 1 + (H + 2 * self.padding - HH) // self.stride
         W_out = 1 + (W + 2 * self.padding - WW) // self.stride
+        print("forward: input_shape={}, output_height={}, output_width={}".format(x.shape, H_out, W_out))
 
         # 添加padding
         # x_padded = cp.pad(x, ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant')
@@ -206,10 +195,34 @@ class Conv2d:
         out = w_col @ x_col + self.bias[:, None]
         out = out.reshape(F, H_out, W_out, N)
         out = out.transpose(3, 0, 1, 2)  # 转换回(N, F, H_out, W_out)的形状
+        print("forward: output_shape={}".format(out.shape))
 
         return out
     
+    def col2im(self, cols, x_shape, HH, WW, stride, padding):
+        N, C, H, W = x_shape
+        H_padded, W_padded = H + 2 * padding, W + 2 * padding
+        x_padded = cp.zeros((N, C, H_padded, W_padded))
+
+        out_h = (H_padded - HH) // stride + 1
+        out_w = (W_padded - WW) // stride + 1
         
+        cols_reshaped = cols.reshape(C, HH, WW, N, out_h, out_w).transpose(3, 0, 1, 2, 4, 5)
+
+        for i in range(out_h):
+            for j in range(out_w):
+                i_start = i * stride
+                i_end = i_start + HH
+                j_start = j * stride
+                j_end = j_start + WW
+                # 添加检查，确保切片的大小总是匹配的
+                if i_end <= H + 2 * padding and j_end <= W + 2 * padding:
+                    x_padded[:, :, i_start:i_end, j_start:j_end] += cols_reshaped[:, :, :, :, i, j]
+
+        if padding == 0:
+            return x_padded
+        return x_padded[:, :, padding:-padding, padding:-padding]
+
     def backward(self, dy, lr):
         """
         dy - the gradient of last layer with shape (N, O, H', W')
@@ -220,6 +233,7 @@ class Conv2d:
         """
         N, F, H_out, W_out = dy.shape
         _, C, H, W = self.x.shape # 使用前向传播中记录的输入形状
+        print("backward: dy_shape={}, lr={}".format(dy.shape, lr))
 
         # x_padded = cp.pad(self.x, ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant')
         # dx_padded = cp.zeros_like(x_padded)
@@ -241,6 +255,7 @@ class Conv2d:
         x_padded = cp.pad(self.x, ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant')
         x_col = self.im2col(x_padded, self.kernel_size, self.kernel_size, self.stride)
         dy_col = dy.transpose(1, 2, 3, 0).reshape(F, -1)
+        print("backward: dw_shape={}, db_shape={}".format(dw.shape, db.shape))
 
         dw = dy_col @ x_col.T
         dw = dw.reshape(self.weight.shape)
@@ -248,6 +263,7 @@ class Conv2d:
 
         dx_col = self.weight.reshape(F, -1).T @ dy_col
         dx = self.col2im(dx_col, (N, C, H, W), self.kernel_size, self.kernel_size, self.stride, self.padding)
+        print("backward: dx_shape={}".format(dx.shape))
 
         # 更新权重和偏置
         self.weight -= lr * dw
@@ -357,6 +373,13 @@ class Linear:
         self.weight = cp.random.randn(out_features, in_features) * cp.sqrt(2. / in_features)
         self.bias = cp.zeros(out_features) if bias else None
 
+    def get_weights(self):
+        return {'weight': self.weight, 'bias': self.bias}
+
+    def set_weights(self, weights):
+        self.weight = weights['weight']
+        self.bias = weights['bias']
+        
     def forward(self, x):
         self.x = x
         if self.bias is not None:
