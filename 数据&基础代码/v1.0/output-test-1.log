@@ -1,0 +1,22 @@
+Conv2d initialized with in_channels=1, out_channels=6, kernel_size=5, stride=1, padding=2
+Conv2d initialized with in_channels=6, out_channels=16, kernel_size=5, stride=1, padding=0
+Epoch 1/10:   0%|          | 0/60000 [00:00<?, ?it/s]Epoch 1/10:   0%|          | 0/60000 [00:05<?, ?it/s]
+Input shape: (128, 1, 28, 28)
+Filter shape: (6, 1, 5, 5)
+Output height: 28, Output width: 28
+Padded input shape: (128, 1, 32, 32)
+im2col output shape: (131072, 25)
+Weight matrix shape for matmul: (6, 25)
+x_col reshaped for matmul: (25, 131072)
+Output shape before reshape: (6, 131072)
+Traceback (most recent call last):
+  File "train-test.py", line 190, in <module>
+    outputs = model.forward(x_batch)
+  File "train-test.py", line 41, in forward
+    x = self.conv1.forward(x)
+  File "/mnt/home/xuzechen/Class_AI_MNIST/2024夏季学期工高实验班实验一-MNIST识别/数据&基础代码/module.py", line 218, in forward
+    out = out.reshape(F, H_out, W_out, N)
+  File "cupy/core/core.pyx", line 614, in cupy.core.core.ndarray.reshape
+  File "cupy/core/_routines_manipulation.pyx", line 79, in cupy.core._routines_manipulation._ndarray_reshape
+  File "cupy/core/_routines_manipulation.pyx", line 297, in cupy.core._routines_manipulation._reshape
+ValueError: cannot reshape array of size 786432 into shape 602112
